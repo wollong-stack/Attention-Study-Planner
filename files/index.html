@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1015" />
+<title>어텐션 · D-day 플래너</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;500;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ink:#0d1015; --ink2:#141923; --card:#1a212e; --card2:#222b3a;
+  --line:#2c3647; --txt:#e9eef6; --sub:#94a3b8; --muted:#64748b;
+  --amber:#ffc23d; --amber-d:#f2a900; --mint:#3ee0a3; --coral:#ff6b6b; --violet:#8b9dff;
+  --fd:'Black Han Sans',sans-serif; --fb:'Gothic A1',sans-serif; --fm:'Space Mono',monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+html,body{background:var(--ink);}
+body{font-family:var(--fb);color:var(--txt);min-height:100vh;
+  background:
+   radial-gradient(1200px 600px at 80% -10%, rgba(255,194,61,.10), transparent 60%),
+   radial-gradient(900px 500px at -10% 110%, rgba(62,224,163,.08), transparent 55%),
+   var(--ink);}
+#grain{position:fixed;inset:0;pointer-events:none;opacity:.04;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+#wrap{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:0 0 96px;}
+.hl{position:relative;display:inline;}
+.hl::after{content:"";position:absolute;left:-2px;right:-4px;bottom:2px;height:42%;
+  background:linear-gradient(90deg,var(--amber),var(--amber-d));transform:skew(-9deg);z-index:-1;opacity:.85;border-radius:2px;}
+.disp{font-family:var(--fd);letter-spacing:.4px;line-height:1.15;}
+.mono{font-family:var(--fm);}
+.fade{animation:fade .5s ease both;}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+button{cursor:pointer;border:none;font-family:var(--fb);font-weight:800;transition:transform .12s ease,filter .2s;}
+button:active{transform:scale(.97);}
+input,textarea{font-family:var(--fb);}
+input::placeholder,textarea::placeholder{color:var(--muted);}
+/* #8: 키보드 포커스 표시 복원 */
+.inp{width:100%;background:var(--ink2);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;color:var(--txt);font-size:15px;outline:none;}
+.inp:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:6px;}
+#nav{position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(13,16,21,.86);
+  backdrop-filter:blur(14px);border-top:1px solid var(--line);}
+#nav>div{max-width:520px;margin:0 auto;display:flex;}
+.tabbtn{flex:1;background:transparent;padding:12px 0 16px;display:flex;flex-direction:column;
+  align-items:center;gap:4px;color:var(--muted);font-size:11px;}
+.tabbtn.on{color:var(--amber);}
+.tabbtn .ic{font-size:20px;line-height:1;}
+.scroll::-webkit-scrollbar{height:6px}
+.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+.subcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;}
+.chip{font-family:var(--fm);font-weight:700;}
+/* #6: 키보드 접근 가능한 task 행 */
+.taskrow{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:opacity .2s;}
+.taskrow:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+.taskrow.done{opacity:.55;}
+.taskrow.done .sname{text-decoration:line-through;}
+.cbox{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:#0d1015;font-weight:900;}
+.taskrow.done .cbox{border-color:var(--mint);background:var(--mint);}
+.seg{flex:1;background:transparent;border:1px solid var(--line);color:var(--sub);border-radius:10px;padding:9px 0;font-size:13px;font-weight:700;}
+.seg.on{background:var(--card2);border-color:var(--amber);color:var(--amber);}
+/* #9: 저장 표시 크기 */
+#sync{position:fixed;top:10px;right:12px;z-index:30;font-size:13px;color:var(--sub);font-family:var(--fm);}
+.bubble{max-width:82%;white-space:pre-wrap;line-height:1.5;font-size:14.5px;padding:11px 14px;border-radius:16px;}
+.typing span{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--sub);margin:0 2px;animation:bd 1.2s infinite;}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes bd{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+/* #6: task 수정/삭제 버튼 */
+.task-actions{display:flex;gap:4px;flex:0 0 auto;opacity:0;transition:opacity .15s;}
+.taskrow:hover .task-actions,.taskrow:focus-within .task-actions{opacity:1;}
+.task-act{background:transparent;color:var(--muted);padding:4px 6px;font-size:14px;font-weight:400;border-radius:6px;}
+.task-act:hover{color:var(--txt);background:var(--card2);}
+/* #2: 복구 코드 박스 */
+.code-box{background:var(--ink2);border:1px dashed var(--amber);border-radius:10px;padding:10px 14px;
+  font-family:var(--fm);font-size:12px;color:var(--amber);letter-spacing:1px;word-break:break-all;text-align:center;user-select:all;}
+</style>
+</head>
+<body>
+<div id="grain"></div>
+<div id="sync"></div>
+<div id="wrap">
+  <div id="header"></div>
+  <div id="view"></div>
+</div>
+<div id="nav" style="display:none"><div>
+  <button class="tabbtn" data-tab="setup"><span class="ic">⚙️</span>설정</button>
+  <button class="tabbtn" data-tab="plan"><span class="ic">🗓️</span>이번 주</button>
+  <button class="tabbtn" data-tab="reflect"><span class="ic">📝</span>회고</button>
+  <button class="tabbtn" data-tab="coach"><span class="ic">💬</span>코치</button>
+</div></div>
+
+<script>
+"use strict";
+/* ============================================================
+   CONFIG
+   SUPABASE_KEY: Supabase 대시보드 > Settings > API > anon public key
+   FUNCTION_URL: Edge Function 'coach' 배포 후 URL
+   ============================================================ */
+const CONFIG = {
+  SUPABASE_URL : "https://dukfcfjlmhfkrihfitbi.supabase.co",
+  SUPABASE_KEY : "sb_publishable_twHlTdXtEmF3HOwM0h8ydA_zrMcqDJu",
+  FUNCTION_URL : "https://dukfcfjlmhfkrihfitbi.supabase.co/functions/v1/coach",
+};
+/* ============================================================ */
+
+const WEEKDAYS=["일","월","화","수","목","금","토"];
+const WLABEL={1:"적게",2:"보통",3:"많이"};
+const KEY="attention-planner-v4";
+const cfgReady = CONFIG.SUPABASE_KEY.indexOf("여기에")<0;
+let db=null;
+try{ if(cfgReady && window.supabase) db=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_KEY); }catch(e){}
+
+/* ---------- utils ---------- */
+function newId(){try{return crypto.randomUUID();}catch(e){return "id-"+Date.now()+"-"+Math.random().toString(36).slice(2);}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null;}catch(e){return null;}}
+function todayMid(){const d=new Date();d.setHours(0,0,0,0);return d;}
+function parseDate(s){if(!s)return null;const d=new Date(s+"T00:00:00");return isNaN(d)?null:d;}
+function dayDiff(a,b){return Math.round((b-a)/86400000);}
+function fmtMD(d){return (d.getMonth()+1)+"."+d.getDate();}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------- 주(週) 헬퍼 ---------- */
+function iso(d){return d.toISOString().slice(0,10);}
+function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const wd=x.getDay();x.setDate(x.getDate()+(wd===0?-6:1-wd));return x;}
+function curKey(){return iso(mondayOf(todayMid()));}
+function nextKey(){const m=mondayOf(todayMid());m.setDate(m.getDate()+7);return iso(m);}
+function weekDates(key){const m=new Date(key+"T00:00:00");const a=[];for(let i=0;i<7;i++){const d=new Date(m);d.setDate(m.getDate()+i);a.push({i,iso:iso(d),wd:d.getDay(),md:fmtMD(d)+"("+WEEKDAYS[d.getDay()]+")"});}return a;}
+function weekRange(key){const a=weekDates(key);return fmtMD(new Date(a[0].iso+"T00:00:00"))+" ~ "+fmtMD(new Date(a[6].iso+"T00:00:00"));}
+function weekHash(w){return JSON.stringify((w.subjects||[]).map(x=>({n:x.name,c:x.content,w:x.weight})));}
+
+/* #1: done 키를 인덱스 대신 task 텍스트 기반으로 — 재생성해도 체크 유지 */
+function taskDoneId(date, subject, taskText){
+  return date+"|"+subject+"|"+(taskText||"").slice(0,40);
+}
+
+function ensureWeek(key){
+  if(S.weeks[key])return S.weeks[key];
+  const prevKeys=Object.keys(S.weeks).filter(k=>k<key).sort();
+  const prev=prevKeys.length?S.weeks[prevKeys[prevKeys.length-1]]:null;
+  const subjects=(prev&&prev.subjects&&prev.subjects.length)
+    ? prev.subjects.map(s=>({name:s.name,content:s.content||"",weight:s.weight||2}))
+    : ["국어","영어","수학","과학","사회"].map(n=>({name:n,content:"",weight:2}));
+  S.weeks[key]={subjects,aiWeek:null,done:{},reflection:null};
+  return S.weeks[key];
+}
+function editKey(){return settingsWeek==="next"?nextKey():curKey();}
+function editWeek(){return ensureWeek(editKey());}
+
+/* ---------- state ---------- */
+let S=load()||{ id:newId(), nickname:"", examDate:"", weeks:{}, generated:false, tab:"setup", coachHistory:[] };
+if(!S.id)S.id=newId();
+if(S.examDate===undefined)S.examDate="";
+if(!S.coachHistory)S.coachHistory=[];
+if(!S.weeks){
+  S.weeks={};
+  if(Array.isArray(S.subjects)&&S.subjects.length){
+    S.weeks[curKey()]={subjects:S.subjects.map(s=>({name:s.name,content:s.content||"",weight:s.weight||2})),aiWeek:null,done:{},reflection:null};
+  }
+  delete S.subjects; delete S.aiWeek; delete S.done; delete S.aiPlan; delete S.reflections;
+}
+let aiBusy=false, reflectRating=3, settingsWeek="cur";
+
+/* #11: 코치 대화 localStorage 복원 */
+let coachMsgs = S.coachHistory && S.coachHistory.length
+  ? S.coachHistory
+  : [{role:"assistant",text:"안녕! 나는 어텐션 코치야 😎\n공부하다 막히거나, 뭘 먼저 할지 모르겠을 때 편하게 말 걸어줘."}];
+let coachBusy=false;
+
+/* ---------- 동기화 ---------- */
+let syncTimer=null;
+function setSync(t){const el=document.getElementById("sync");if(el)el.textContent=t;}
+function curStats(){
+  const w=S.weeks[curKey()];let total=0,done=0;
+  if(w&&w.aiWeek&&w.aiWeek.days)w.aiWeek.days.forEach(d=>d.tasks.forEach(t=>{
+    total++;
+    if(w.done[taskDoneId(d.date,t.subject,t.task)])done++;
+  }));
+  return {total,done};
+}
+function syncUp(){
+  save(); if(!db||!S.nickname)return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(async()=>{
+    const st=curStats();
+    try{
+      setSync("저장 중…");
+      await db.from("students").upsert({id:S.id,nickname:S.nickname||"이름없음",data:S,progress:st.done,total:st.total,updated_at:new Date().toISOString()});
+      setSync("✓ 저장됨");
+      setTimeout(()=>setSync(""),2000);
+    }catch(e){ setSync("⚠ 저장 실패"); }
+  },800);
+}
+
+/* #2: targetId 인수 추가 — 복구 코드로 다른 기기 데이터 불러오기 */
+async function syncDown(targetId){
+  const sid=targetId||S.id;
+  if(!db||!sid)return false;
+  try{
+    const {data,error}=await db.from("students").select("data").eq("id",sid).maybeSingle();
+    if(!error&&data&&data.data){
+      const srv=data.data;
+      S={...srv,id:sid,nickname:srv.nickname||S.nickname};
+      if(!S.weeks)S.weeks={};
+      if(!S.coachHistory)S.coachHistory=[];
+      save();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+/* ---------- AI 주간 분배 ---------- */
+function fallbackWeek(dates,subs){
+  const days=dates.map(dd=>({date:dd.iso,wd:dd.wd,md:dd.md,tasks:[]}));
+  subs.forEach((s,si)=>{const cnt=(s.weight||2)+2;for(let k=0;k<cnt;k++){const di=(si+k*2)%7;days[di].tasks.push({subject:s.name,task:(s.content||"").slice(0,24)||"이번 주 분량 학습"});}});
+  return days;
+}
+
+/* #3: generateWeek가 {usedAI} 반환 — 호출자가 결과를 정직하게 표시 가능 */
+async function generateWeek(key){
+  if(aiBusy)return {usedAI:false};
+  aiBusy=true;
+  const w=ensureWeek(key);
+  if(S.tab==="plan"&&key===curKey())render();
+  const dates=weekDates(key);
+  const subs=(w.subjects||[]).filter(s=>s.name.trim()&&s.content&&s.content.trim());
+  const hash=weekHash(w);
+  let days=null, usedAI=false;
+  if(cfgReady&&subs.length){
+    const sys=`너는 학습 분량 배분 도우미다. 학생이 과목별로 '이번 주에 공부할 분량'과 '비중'을 적었다. 이걸 주어진 7일에 나눠 일주일 안에 다 끝내도록 배치한다.
+규칙: 비중이 높은 과목일수록 더 많은 날에 배치. 하루에 보통 2~3과목, 너무 몰아넣지 말 것. 분량을 쪼개 날짜별로 진도가 나가게. 각 task는 구체적이고 짧게(20자 이내).
+반드시 JSON만 출력: {"0":[{"subject":"수학","task":"..."}],"1":[...],...,"6":[...]}. 키는 0~6. 코드블록·설명 금지.`;
+    const user=`이번 주 7일: ${JSON.stringify(dates.map(d=>({i:d.i,날짜:d.md})))}
+과목별 이번 주 분량:
+${subs.map(s=>`- ${s.name} (비중:${WLABEL[s.weight||2]}): ${s.content}`).join("\n")}
+각 과목 분량을 위 7일에 나눠 배치해 JSON으로만 답해줘.`;
+    try{
+      const res=await fetch(CONFIG.FUNCTION_URL,{method:"POST",headers:{"Content-Type":"application/json","apikey":CONFIG.SUPABASE_KEY,"Authorization":"Bearer "+CONFIG.SUPABASE_KEY},body:JSON.stringify({system:sys,messages:[{role:"user",content:user}]})});
+      const d=await res.json();
+      let txt=(d.text||"").trim();const a=txt.indexOf("{"),b=txt.lastIndexOf("}");if(a>=0&&b>a)txt=txt.slice(a,b+1);
+      const obj=JSON.parse(txt);
+      days=dates.map(dd=>{const arr=obj[dd.i]||obj[String(dd.i)]||[];return {date:dd.iso,wd:dd.wd,md:dd.md,tasks:(Array.isArray(arr)?arr:[]).filter(x=>x&&x.subject).map(x=>({subject:String(x.subject),task:String(x.task||"")}))};});
+      usedAI=true;
+    }catch(e){ days=null; }
+  }
+  if(!days)days=fallbackWeek(dates,subs);
+  w.aiWeek={hash,days};
+  aiBusy=false;
+  syncUp();
+  if(S.tab==="plan"||S.tab==="setup")render();
+  return {usedAI};
+}
+
+/* ---------- render ---------- */
+function renderHeader(){
+  const t=todayMid();const ed=parseDate(S.examDate);const dd=ed?dayDiff(t,ed):null;
+  document.getElementById("header").innerHTML=`
+   <div class="fade" style="padding:26px 20px 14px">
+    <div class="mono" style="color:var(--amber);font-size:12px;letter-spacing:2px;margin-bottom:8px">ATTENTION · D-DAY PLANNER</div>
+    <h1 class="disp" style="font-size:30px">${S.nickname?esc(S.nickname)+"의 ":""}<span class="hl">시험 작전</span></h1>
+    <div style="color:var(--sub);font-size:13px;margin-top:8px">${dd!==null&&dd>=0?`시험까지 <span class="chip" style="color:${dd<=3?'var(--coral)':'var(--amber)'}">D-${dd===0?"DAY":dd}</span> · `:""}이번 주 ${weekRange(curKey())}</div>
+   </div>`;
+}
+function renderNav(){document.querySelectorAll(".tabbtn").forEach(b=>b.classList.toggle("on",b.dataset.tab===S.tab));}
+function render(){
+  if(!S.nickname){document.getElementById("nav").style.display="none";renderOnboard();return;}
+  document.getElementById("nav").style.display="block";
+  renderHeader(); renderNav();
+  if(S.tab==="setup")renderSetup();
+  else if(S.tab==="plan")renderPlan();
+  else if(S.tab==="reflect")renderReflect();
+  else renderCoach();
+}
+
+/* ----- 주말 배너 ----- */
+function weekendBanner(){
+  const wd=todayMid().getDay(); if(wd!==0&&wd!==6)return "";
+  return `<div style="background:linear-gradient(90deg,rgba(255,194,61,.14),rgba(62,224,163,.10));border:1px solid var(--amber);border-radius:14px;padding:13px 15px;margin-bottom:16px">
+    <div style="font-weight:800;font-size:14px;margin-bottom:3px">🗓️ 주말 — 한 주 정리할 시간!</div>
+    <div style="color:var(--sub);font-size:13px;line-height:1.5">이번 주를 돌아보고, 설정에서 <b style="color:var(--txt)">'다음 주'</b> 분량을 정해보자.</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="bn-ref" style="flex:1;background:var(--amber);color:#1a1206;border-radius:10px;padding:9px;font-size:13px">📝 회고 쓰기</button>
+      <button id="bn-next" style="flex:1;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px;font-size:13px">⚙️ 다음 주 분량</button>
+    </div>
+  </div>`;
+}
+function bindBanner(){
+  const a=document.getElementById("bn-ref"),b=document.getElementById("bn-next");
+  if(a)a.addEventListener("click",()=>{S.tab="reflect";render();});
+  if(b)b.addEventListener("click",()=>{settingsWeek="next";S.tab="setup";render();});
+}
+
+/* ----- Onboarding ----- */
+function renderOnboard(){
+  document.getElementById("header").innerHTML="";
+  document.getElementById("view").innerHTML=`
+  <div class="fade" style="padding:90px 28px 0;text-align:center">
+    <div class="mono" style="color:var(--amber);font-size:12px;letter-spacing:2px;margin-bottom:14px">ATTENTION · D-DAY PLANNER</div>
+    <h1 class="disp" style="font-size:34px;margin-bottom:10px"><span class="hl">시험 작전</span>을<br>같이 짜볼까?</h1>
+    <p style="color:var(--sub);font-size:14px;margin-bottom:30px">먼저 닉네임을 정해줘.<br>(선생님이 누군지 알아볼 수 있게!)</p>
+    <input id="nick" class="inp" placeholder="닉네임 입력" style="text-align:center;font-size:17px" maxlength="20">
+    <button id="start" style="width:100%;margin-top:16px;background:linear-gradient(90deg,var(--amber),var(--amber-d));color:#1a1206;border-radius:16px;padding:16px;font-size:16px;box-shadow:0 10px 30px -10px rgba(255,194,61,.5)">시작하기 →</button>
+    <div style="margin-top:28px;border-top:1px solid var(--line);padding-top:20px">
+      <div style="color:var(--sub);font-size:13px;margin-bottom:10px">다른 기기에서 쓰던 데이터가 있어?</div>
+      <button id="restore-btn" style="background:var(--card2);color:var(--sub);border:1px solid var(--line);border-radius:12px;padding:10px 18px;font-size:13px">🔑 복구 코드로 데이터 가져오기</button>
+      <div id="restore-area" style="display:none;margin-top:12px;text-align:left">
+        <input id="restore-code" class="inp" placeholder="복구 코드 붙여넣기" style="font-size:14px;margin-bottom:8px">
+        <button id="restore-go" style="width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--amber);border-radius:12px;padding:11px;font-size:14px">가져오기</button>
+        <div id="restore-msg" style="margin-top:8px;font-size:13px;color:var(--sub);text-align:center"></div>
+      </div>
+    </div>
+  </div>`;
+  const inp=document.getElementById("nick");
+  function go(){const v=inp.value.trim();if(!v){inp.focus();return;}S.nickname=v;S.tab="setup";syncUp();render();}
+  document.getElementById("start").addEventListener("click",go);
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")go();});
+  inp.focus();
+
+  /* #2: 복구 코드 입력 흐름 */
+  document.getElementById("restore-btn").addEventListener("click",()=>{
+    document.getElementById("restore-area").style.display="block";
+    document.getElementById("restore-code").focus();
+  });
+  document.getElementById("restore-go").addEventListener("click",async()=>{
+    const code=(document.getElementById("restore-code").value||"").trim();
+    const msgEl=document.getElementById("restore-msg");
+    if(!code){msgEl.textContent="복구 코드를 입력해줘.";return;}
+    msgEl.style.color="var(--sub)"; msgEl.textContent="불러오는 중…";
+    const ok=await syncDown(code);
+    if(ok){
+      if(S.coachHistory&&S.coachHistory.length) coachMsgs=S.coachHistory;
+      render();
+    } else {
+      msgEl.style.color="var(--coral)";
+      msgEl.textContent="해당 코드의 데이터를 찾을 수 없어. 코드를 다시 확인해봐.";
+    }
+  });
+}
+
+/* ----- Setup ----- */
+function renderSetup(){
+  const v=document.getElementById("view"); const key=editKey();
+  v.innerHTML=`
+  <div style="padding:4px 16px 8px">
+
+    <!-- #4: 시험일을 주차 토글과 분리 — 전역 설정 카드 -->
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
+      ${secHead("📌","시험일",'<span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:4px">· 전체 공통 설정</span>')}
+      <input id="exam-date" class="inp" type="date" value="${esc(S.examDate||"")}" style="color-scheme:dark">
+      <div style="color:var(--sub);font-size:13px;margin-top:6px">한 번만 설정하면 D-day를 항상 카운트다운해줘요.</div>
+    </div>
+
+    <!-- #2: 복구 코드 + 닉네임 변경 -->
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
+      ${secHead("🔑","내 복구 코드")}
+      <div class="code-box" id="my-code" title="길게 눌러 복사">${esc(S.id)}</div>
+      <div style="color:var(--sub);font-size:13px;margin-top:8px;line-height:1.55">다른 기기에서 이 코드를 입력하면 데이터를 가져올 수 있어. 어딘가에 저장해둬!</div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <span style="color:var(--sub);font-size:13px;flex:0 0 auto">닉네임</span>
+        <input id="nick-edit" class="inp" value="${esc(S.nickname)}" maxlength="20" style="flex:1;padding:8px 12px;font-size:14px">
+        <button id="nick-save" style="background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;flex:0 0 auto">변경</button>
+      </div>
+    </div>
+
+    <!-- 주차 토글 -->
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="seg sw ${settingsWeek==='cur'?'on':''}" data-w="cur">이번 주</button>
+      <button class="seg sw ${settingsWeek==='next'?'on':''}" data-w="next">다음 주</button>
+    </div>
+    <div style="color:var(--sub);font-size:13px;text-align:center;margin-bottom:18px">${settingsWeek==='next'?'다음 주':'이번 주'} (${weekRange(key)}) 분량을 정해요</div>
+
+    <div style="margin-bottom:22px">
+      ${secHead("📚","과목별 학습 분량")}
+      <div style="color:var(--sub);font-size:13px;margin:-6px 0 12px;line-height:1.55">공부할 분량을 적고 비중만 정하면, AI가 일주일에 맞게 자동으로 나눠줘요.</div>
+      <div id="subs"></div>
+      <button id="addsub" style="width:100%;background:var(--card2);color:var(--txt);border-radius:14px;padding:12px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px dashed var(--line)">＋ 과목 추가</button>
+    </div>
+    <button id="gen" style="width:100%;background:linear-gradient(90deg,var(--amber),var(--amber-d));color:#1a1206;border-radius:16px;padding:16px;font-size:16px;margin-top:2px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 30px -10px rgba(255,194,61,.5)">✨ ${settingsWeek==='next'?'다음 주 계획 만들기':'이번 주 계획 짜기'}</button>
+    <button id="reset" style="width:100%;background:transparent;color:var(--muted);padding:14px;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:6px">↻ 전체 초기화</button>
+  </div>`;
+
+  renderSubs();
+  v.querySelectorAll(".sw").forEach(b=>b.addEventListener("click",()=>{settingsWeek=b.dataset.w;renderSetup();}));
+  document.getElementById("exam-date").addEventListener("change",e=>{S.examDate=e.target.value;syncUp();renderHeader();});
+
+  /* 닉네임 변경 */
+  document.getElementById("nick-save").addEventListener("click",()=>{
+    const nv=(document.getElementById("nick-edit").value||"").trim();
+    if(!nv){alert("닉네임을 입력해줘.");return;}
+    S.nickname=nv; syncUp(); renderHeader();
+    const btn=document.getElementById("nick-save");
+    if(btn){btn.textContent="저장됨 ✓";setTimeout(()=>{if(btn)btn.textContent="변경";},1500);}
+  });
+
+  /* 과목 수 상한 */
+  document.getElementById("addsub").addEventListener("click",()=>{
+    if(editWeek().subjects.length>=8){alert("과목은 최대 8개까지 추가할 수 있어.");return;}
+    editWeek().subjects.push({name:"",content:"",weight:2});
+    renderSubs(); syncUp();
+  });
+
+  /* #3: 다음 주 계획 만들기 — AI 완료 대기 후 정직한 결과 표시 */
+  document.getElementById("gen").addEventListener("click",async()=>{
+    const w=editWeek();
+    const ok=(w.subjects||[]).some(s=>s.name.trim()&&s.content&&s.content.trim());
+    if(!ok){alert("과목명과 학습 분량을 하나 이상 적어주세요.");return;}
+    if(settingsWeek==="next"){
+      const btn=document.getElementById("gen");
+      btn.disabled=true; btn.innerHTML="⏳ AI가 계획 짜는 중…"; btn.style.opacity=".7";
+      const {usedAI}=await generateWeek(nextKey());
+      if(btn){btn.disabled=false; btn.innerHTML="✨ 다음 주 계획 만들기"; btn.style.opacity="1";}
+      if(usedAI){
+        alert("AI가 다음 주 계획을 완성했어 😊\n월요일부터 '이번 주' 탭에 보여줄게!");
+      } else if(!cfgReady){
+        alert("AI 서버가 아직 연결 안 됐어서 자동 배분으로 만들었어.\n선생님이 연결해주면 더 스마트하게 짜줄 거야!");
+      } else {
+        alert("AI 응답에 문제가 생겨서 자동 배분으로 만들었어.\n'다시 짜기'를 눌러서 다시 시도해볼 수도 있어.");
+      }
+    } else {
+      S.generated=true; S.tab="plan"; syncUp(); render();
+    }
+  });
+  document.getElementById("reset").addEventListener("click",reset);
+}
+
+function secHead(ic,t,extra=""){
+  return `<div style="display:flex;align-items:center;gap:7px;margin-bottom:12px"><span>${ic}</span><span style="font-weight:800;font-size:14px">${t}${extra}</span></div>`;
+}
+
+function renderSubs(){
+  const w=editWeek(); const c=document.getElementById("subs"); c.innerHTML="";
+  w.subjects.forEach((s,i)=>{
+    const el=document.createElement("div"); el.className="subcard";
+    el.innerHTML=`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input class="inp s-name" data-i="${i}" placeholder="과목명" value="${esc(s.name)}" style="flex:1">
+        <button class="s-del" data-i="${i}" style="background:transparent;color:var(--muted);padding:6px;font-size:18px" aria-label="과목 삭제">✕</button>
+      </div>
+      <textarea class="inp s-content" data-i="${i}" rows="2" placeholder="학습 분량 (예: 교재 3단원, 문제집 p.30~60, 단어 5강)" style="resize:none;font-size:14px;margin-bottom:10px">${esc(s.content||"")}</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span style="color:var(--sub);font-size:13px;font-weight:700;flex:0 0 auto">비중</span>
+        <div style="display:flex;gap:6px;flex:1">
+          ${[1,2,3].map(wt=>`<button class="seg s-w ${(s.weight||2)===wt?'on':''}" data-i="${i}" data-w="${wt}">${WLABEL[wt]}</button>`).join("")}
+        </div>
+      </div>`;
+    c.appendChild(el);
+  });
+  c.querySelectorAll(".s-name").forEach(el=>el.addEventListener("input",e=>{editWeek().subjects[+e.target.dataset.i].name=e.target.value;syncUp();}));
+  c.querySelectorAll(".s-content").forEach(el=>el.addEventListener("input",e=>{editWeek().subjects[+e.target.dataset.i].content=e.target.value;syncUp();}));
+  c.querySelectorAll(".s-w").forEach(el=>el.addEventListener("click",e=>{const b=e.currentTarget;editWeek().subjects[+b.dataset.i].weight=+b.dataset.w;syncUp();renderSubs();}));
+  /* #7: 과목 삭제 확인 */
+  c.querySelectorAll(".s-del").forEach(el=>el.addEventListener("click",e=>{
+    const idx=+e.currentTarget.dataset.i;
+    const name=editWeek().subjects[idx].name||"이 과목";
+    if(!confirm(`'${name}'을 삭제할까요?\n작성한 분량이 함께 사라져요.`))return;
+    editWeek().subjects.splice(idx,1); renderSubs(); syncUp();
+  }));
+}
+
+function reset(){
+  if(!confirm("모든 주차의 계획·회고를 초기화할까요? (닉네임은 유지됩니다)"))return;
+  S.examDate=""; S.weeks={}; S.generated=false; S.tab="setup"; settingsWeek="cur";
+  syncUp(); render();
+}
+
+/* ----- Plan (이번 주) ----- */
+function renderPlan(){
+  const v=document.getElementById("view"); const key=curKey(); const w=ensureWeek(key);
+  const hasContent=(w.subjects||[]).some(s=>s.name.trim()&&s.content&&s.content.trim());
+  if(!hasContent){
+    v.innerHTML=`<div style="padding:4px 16px">${weekendBanner()}</div><div class="fade" style="text-align:center;padding:40px 30px">
+      <div style="font-size:40px;margin-bottom:12px">📚</div>
+      <div style="font-weight:800;font-size:16px">아직 이번 주 분량이 없어요.</div>
+      <div style="color:var(--sub);font-size:13px;margin-top:6px">설정에서 과목별 학습 분량을 적으면<br>AI가 일주일에 맞게 자동으로 나눠줍니다.</div>
+      <button id="goset" style="margin-top:18px;background:var(--amber);color:#1a1206;border-radius:12px;padding:10px 20px">설정으로 가기 ›</button></div>`;
+    bindBanner(); document.getElementById("goset").addEventListener("click",()=>{S.tab="setup";render();});
+    return;
+  }
+  if((!w.aiWeek||w.aiWeek.hash!==weekHash(w))&&!aiBusy){ generateWeek(key); }
+  if(aiBusy&&!w.aiWeek){
+    v.innerHTML=`<div class="fade" style="text-align:center;padding:70px 30px"><div style="font-size:34px;margin-bottom:14px">✨</div><div style="font-weight:800">AI가 이번 주 분량을 나누는 중…</div><div style="color:var(--sub);font-size:13px;margin-top:6px">잠깐만 기다려줘</div></div>`;
+    return;
+  }
+  const st=curStats(); const pct=st.total?Math.round(st.done/st.total*100):0;
+  const todayIso=iso(todayMid());
+
+  /* #1/#6: task 행 — 안정 키 + 수정/삭제/추가 */
+  let cards=((w.aiWeek&&w.aiWeek.days)||[]).filter(d=>d.tasks&&d.tasks.length).map(d=>{
+    const rows=d.tasks.map((t,i)=>{
+      const id=taskDoneId(d.date,t.subject,t.task);
+      const done=!!w.done[id];
+      return `<div class="taskrow ${done?'done':''}" data-id="${esc(id)}" role="checkbox" aria-checked="${done}" tabindex="0">
+        <div class="cbox">${done?'✓':''}</div>
+        <div style="flex:1;min-width:0">
+          <div><span class="sname" style="font-weight:800;font-size:15px">${esc(t.subject)}</span></div>
+          <div class="task-text" style="font-size:13px;color:var(--sub);margin-top:3px">${esc(t.task||"")}</div>
+        </div>
+        <div class="task-actions">
+          <button class="task-act t-edit" data-date="${esc(d.date)}" data-di="${i}" title="수정" aria-label="수정">✏️</button>
+          <button class="task-act t-del" data-date="${esc(d.date)}" data-di="${i}" title="삭제" aria-label="삭제">🗑</button>
+        </div>
+      </div>`;
+    }).join("");
+    return `<div style="margin-bottom:16px">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+        <span class="disp" style="font-size:18px">${esc(d.md)}</span>
+        ${d.date===todayIso?`<span class="chip" style="font-size:11px;color:#1a1206;background:var(--amber);padding:2px 7px;border-radius:6px">TODAY</span>`:""}
+      </div>
+      ${rows}
+      <button class="t-add" data-date="${esc(d.date)}" style="width:100%;background:transparent;color:var(--muted);border:1px dashed var(--line);border-radius:10px;padding:7px;font-size:12px;margin-top:2px">＋ 항목 추가</button>
+    </div>`;
+  }).join("");
+
+  v.innerHTML=`
+  <div style="padding:4px 16px 8px">
+    ${weekendBanner()}
+    <div class="fade" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="color:var(--sub);font-size:13px;font-weight:700">이번 주 진행률</span>
+        <span id="pct" class="disp" style="font-size:26px;color:var(--mint)">${pct}%</span></div>
+      <div style="height:9px;background:var(--ink2);border-radius:99px;overflow:hidden;margin-top:8px">
+        <div id="bar" style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--mint),#2bc88c);border-radius:99px;transition:width .4s"></div></div>
+      <div id="cnt" style="color:var(--sub);font-size:13px;margin-top:6px">${st.done} / ${st.total} 항목 완료</div>
+    </div>
+    <button id="regen" style="width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:16px;font-size:13px">↻ 이번 주 다시 짜기</button>
+    <div>${cards||'<div style="text-align:center;color:var(--sub);padding:30px">분배 결과가 비어 있어요. 다시 짜기를 눌러보세요.</div>'}</div>
+    <div style="text-align:center;color:var(--sub);font-size:13px;padding:10px 0 4px">이번 주만 끝내도 충분해 — <span style="color:var(--amber)">한 주씩 쌓는 거야 🔥</span></div>
+  </div>`;
+  bindBanner();
+
+  /* #7: 다시 짜기 확인 */
+  document.getElementById("regen").addEventListener("click",()=>{
+    if(!confirm("지금 배치를 지우고 다시 짤까요?\n같은 내용의 체크 표시는 유지됩니다."))return;
+    w.aiWeek=null; generateWeek(key);
+  });
+
+  /* task 행 — 클릭/키보드 토글 */
+  function updateProgress(){
+    const s2=curStats(); const pc=s2.total?Math.round(s2.done/s2.total*100):0;
+    const pctEl=document.getElementById("pct"); const barEl=document.getElementById("bar"); const cntEl=document.getElementById("cnt");
+    if(pctEl)pctEl.textContent=pc+"%";
+    if(barEl)barEl.style.width=pc+"%";
+    if(cntEl)cntEl.textContent=s2.done+" / "+s2.total+" 항목 완료";
+  }
+  v.querySelectorAll(".taskrow").forEach(row=>{
+    function toggle(){
+      const id=row.dataset.id; w.done[id]=!w.done[id]; syncUp();
+      row.classList.toggle("done",!!w.done[id]);
+      row.querySelector(".cbox").textContent=w.done[id]?"✓":"";
+      row.setAttribute("aria-checked",String(!!w.done[id]));
+      updateProgress();
+    }
+    row.addEventListener("click",e=>{if(e.target.closest(".task-actions"))return; toggle();});
+    row.addEventListener("keydown",e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();toggle();}});
+  });
+
+  /* #6: task 수정 */
+  v.querySelectorAll(".t-edit").forEach(btn=>btn.addEventListener("click",e=>{
+    e.stopPropagation();
+    const date=btn.dataset.date; const di=+btn.dataset.di;
+    const day=w.aiWeek&&w.aiWeek.days.find(d=>d.date===date); if(!day)return;
+    const t=day.tasks[di]; if(!t)return;
+    const row=btn.closest(".taskrow");
+    const textEl=row.querySelector(".task-text");
+    const oldText=t.task;
+    textEl.innerHTML=`<input class="inp task-edit-inp" value="${esc(oldText)}" style="font-size:13px;padding:6px 8px">`;
+    const inp=textEl.querySelector("input");
+    inp.focus(); inp.select();
+    function commit(){
+      const nv=inp.value.trim();
+      if(nv&&nv!==oldText){
+        const oldKey=taskDoneId(date,t.subject,oldText);
+        const newKey=taskDoneId(date,t.subject,nv);
+        if(w.done[oldKey]){w.done[newKey]=true; delete w.done[oldKey];}
+        t.task=nv; syncUp();
+      }
+      renderPlan();
+    }
+    inp.addEventListener("blur",commit);
+    inp.addEventListener("keydown",e2=>{
+      if(e2.key==="Enter"){e2.preventDefault(); commit();}
+      if(e2.key==="Escape"){renderPlan();}
+    });
+  }));
+
+  /* #6: task 삭제 */
+  v.querySelectorAll(".t-del").forEach(btn=>btn.addEventListener("click",e=>{
+    e.stopPropagation();
+    const date=btn.dataset.date; const di=+btn.dataset.di;
+    const day=w.aiWeek&&w.aiWeek.days.find(d=>d.date===date); if(!day)return;
+    const t=day.tasks[di]; if(!t)return;
+    if(!confirm(`'${t.subject}: ${t.task}'을 삭제할까요?`))return;
+    delete w.done[taskDoneId(date,t.subject,t.task)];
+    day.tasks.splice(di,1); syncUp(); renderPlan();
+  }));
+
+  /* #6: task 추가 */
+  v.querySelectorAll(".t-add").forEach(btn=>btn.addEventListener("click",e=>{
+    e.stopPropagation();
+    const date=btn.dataset.date;
+    const day=w.aiWeek&&w.aiWeek.days.find(d=>d.date===date); if(!day)return;
+    const subName=(prompt("과목명은?","")||"").trim();
+    if(!subName)return;
+    const taskText=(prompt("내용은?","")||"").trim();
+    if(!taskText)return;
+    day.tasks.push({subject:subName,task:taskText}); syncUp(); renderPlan();
+  }));
+}
+
+/* ----- 주간 회고 ----- */
+const REF_EMO=["","😣","😕","😐","🙂","😄"];
+function renderReflect(){
+  const v=document.getElementById("view"); const key=curKey(); const w=ensureWeek(key);
+  const already=!!w.reflection;
+  const histKeys=Object.keys(S.weeks).filter(k=>S.weeks[k].reflection).sort().reverse();
+  const hist=histKeys.map(k=>{const r=S.weeks[k].reflection;
+    return `<div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:18px">${REF_EMO[r.rating]||"🙂"}</span>
+        <span style="font-weight:800;font-size:13px">${weekRange(k)}</span>
+        ${k===key?`<span class="chip" style="font-size:10px;color:#1a1206;background:var(--amber);padding:1px 6px;border-radius:5px">이번 주</span>`:""}
+      </div>
+      ${r.good?`<div style="font-size:13px;margin-bottom:5px"><span style="color:var(--mint)">잘된 점</span> · ${esc(r.good)}</div>`:""}
+      ${r.hard?`<div style="font-size:13px;margin-bottom:5px"><span style="color:var(--coral)">아쉬운 점</span> · ${esc(r.hard)}</div>`:""}
+      ${r.change?`<div style="font-size:13px;margin-bottom:5px"><span style="color:var(--amber)">다음 주 변화</span> · ${esc(r.change)}</div>`:""}
+      ${r.coach==="__pending__"?`<div style="font-size:13px;color:var(--violet);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">💬 코치가 읽는 중…</div>`:(r.coach?`<div style="font-size:13px;color:var(--violet);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">💬 코치 · ${esc(r.coach)}</div>`:"")}
+    </div>`;}).join("");
+
+  /* #5: 기존 회고 내용 프리필 */
+  if(already) reflectRating=w.reflection.rating||3;
+  const existGood  = already?(w.reflection.good||""):"";
+  const existHard  = already?(w.reflection.hard||""):"";
+  const existChange= already?(w.reflection.change||""):"";
+
+  const emo=[1,2,3,4,5].map(n=>`<button class="ref-emo" data-n="${n}" style="flex:1;background:${reflectRating===n?'var(--card2)':'transparent'};border:1px solid ${reflectRating===n?'var(--amber)':'var(--line)'};border-radius:12px;padding:10px 0;font-size:22px">${REF_EMO[n]}</button>`).join("");
+  v.innerHTML=`
+  <div style="padding:4px 16px 8px">
+    ${weekendBanner()}
+    <div style="margin:2px 0 18px">
+      <h2 class="disp" style="font-size:23px;margin-bottom:4px">이번 주 <span class="hl">회고</span></h2>
+      <div style="color:var(--sub);font-size:13px">${weekRange(key)} · 한 주를 돌아보고 다음 주를 조정해 보자.</div>
+    </div>
+    ${already?`<div style="background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:16px;color:var(--sub);font-size:13px">이번 주 회고를 이미 작성했어. 수정하고 저장하면 덮어써져.</div>`:""}
+    <div style="color:var(--sub);font-size:13px;font-weight:700;margin-bottom:8px">이번 주 어땠어?</div>
+    <div style="display:flex;gap:6px;margin-bottom:18px">${emo}</div>
+    <div style="color:var(--mint);font-size:13px;font-weight:700;margin-bottom:6px">✅ 이번 주 잘된 점</div>
+    <textarea id="r-good" class="inp" rows="2" placeholder="작은 거라도 좋아" style="resize:none;margin-bottom:14px">${esc(existGood)}</textarea>
+    <div style="color:var(--coral);font-size:13px;font-weight:700;margin-bottom:6px">🤔 아쉬운 점과 그 이유</div>
+    <textarea id="r-hard" class="inp" rows="2" placeholder="왜 그랬을까?" style="resize:none;margin-bottom:14px">${esc(existHard)}</textarea>
+    <div style="color:var(--amber);font-size:13px;font-weight:700;margin-bottom:6px">🎯 다음 주에 바꿀 한 가지</div>
+    <textarea id="r-change" class="inp" rows="2" placeholder="딱 하나만 정하자" style="resize:none;margin-bottom:18px">${esc(existChange)}</textarea>
+    <button id="r-save" style="width:100%;background:linear-gradient(90deg,var(--amber),var(--amber-d));color:#1a1206;border-radius:16px;padding:15px;font-size:15px">${already?"회고 수정하기":"회고 저장하기"}</button>
+    ${histKeys.length?`<div style="margin-top:28px;color:var(--sub);font-size:13px;font-weight:700;margin-bottom:10px">지난 회고</div>${hist}`:""}
+  </div>`;
+  bindBanner();
+  v.querySelectorAll(".ref-emo").forEach(b=>b.addEventListener("click",()=>{reflectRating=+b.dataset.n;renderReflect();}));
+  document.getElementById("r-save").addEventListener("click",saveReflection);
+}
+
+async function saveReflection(){
+  const good=(document.getElementById("r-good").value||"").trim();
+  const hard=(document.getElementById("r-hard").value||"").trim();
+  const change=(document.getElementById("r-change").value||"").trim();
+  if(!good&&!hard&&!change){alert("한 줄이라도 적어보자 — 돌아보는 게 핵심이야!");return;}
+  const w=ensureWeek(curKey());
+  const entry={t:new Date().toISOString(),rating:reflectRating,good,hard,change,coach:cfgReady?"__pending__":""};
+  w.reflection=entry; reflectRating=3; syncUp(); render();
+  if(cfgReady){
+    try{
+      const sys=`너는 어텐션 학원의 따뜻한 학습 코치다. 학생이 방금 주간 회고를 적었다. 자책하지 않게 받아주고, 노력을 인정하고, 다음 주 다짐을 응원하며, 아주 작은 행동 제안 하나로 마무리한다. 반말로 2~3문장, 짧고 따뜻하게.`;
+      const user=`주간 회고\n잘된 점: ${good||"(없음)"}\n아쉬운 점/이유: ${hard||"(없음)"}\n다음 주 변화: ${change||"(없음)"}`;
+      const res=await fetch(CONFIG.FUNCTION_URL,{method:"POST",headers:{"Content-Type":"application/json","apikey":CONFIG.SUPABASE_KEY,"Authorization":"Bearer "+CONFIG.SUPABASE_KEY},body:JSON.stringify({system:sys,messages:[{role:"user",content:user}]})});
+      const d=await res.json(); entry.coach=(d.text&&d.text.trim())?d.text.trim():"";
+    }catch(e){ entry.coach=""; }
+    syncUp(); if(S.tab==="reflect")render();
+  }
+}
+
+/* ----- 코치 ----- */
+function renderCoach(){
+  const v=document.getElementById("view");
+  const quick=["계획대로 안 지켜져요","뭐부터 해야 할지 모르겠어요","집중이 안 돼요","그냥 막막해요"];
+  v.innerHTML=`
+   <div style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:420px;padding:0 12px">
+     <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:2px 4px 10px;font-size:13px;color:var(--sub);line-height:1.6">
+       💡 <b style="color:var(--txt)">이럴 때 코치를 불러봐</b> — 계획대로 안 될 때 · 뭘 먼저 할지 모를 때 · 집중이 안 될 때 · 막막할 때.
+     </div>
+     <div id="chat" class="scroll" style="flex:1;overflow-y:auto;padding:4px 4px 12px"></div>
+     <div id="quick" class="scroll" style="display:flex;gap:8px;overflow-x:auto;padding:0 4px 10px"></div>
+     <div style="display:flex;gap:8px;padding:4px 4px 6px">
+       <input id="cin" class="inp" placeholder="코치에게 물어보기…" style="flex:1">
+       <button id="csend" style="background:linear-gradient(135deg,var(--amber),var(--amber-d));color:#1a1206;border-radius:12px;width:50px;font-size:18px">➤</button>
+     </div>
+   </div>`;
+  paintChat();
+  const qc=document.getElementById("quick");
+  if(coachMsgs.length<=1){quick.forEach(q=>{const b=document.createElement("button");b.textContent=q;
+    b.style.cssText="flex:0 0 auto;background:var(--card2);color:var(--sub);border:1px solid var(--line);border-radius:99px;padding:8px 14px;font-size:13px;font-weight:600";
+    b.addEventListener("click",()=>coachSend(q));qc.appendChild(b);});}
+  const inp=document.getElementById("cin");
+  document.getElementById("csend").addEventListener("click",()=>coachSend());
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")coachSend();});
+}
+
+function paintChat(busy){
+  const c=document.getElementById("chat"); if(!c)return;
+  c.innerHTML=coachMsgs.map(m=>`<div style="display:flex;justify-content:${m.role==="user"?"flex-end":"flex-start"};margin-bottom:10px">
+    <div class="bubble" style="background:${m.role==="user"?"linear-gradient(90deg,var(--amber),var(--amber-d))":"var(--card)"};color:${m.role==="user"?"#1a1206":"var(--txt)"};border:${m.role==="user"?"none":"1px solid var(--line)"};font-weight:${m.role==="user"?"700":"400"};border-bottom-right-radius:${m.role==="user"?"5px":"16px"};border-bottom-left-radius:${m.role==="user"?"16px":"5px"}">${esc(m.text)}</div></div>`).join("")
+    +(busy?`<div class="bubble" style="background:var(--card);border:1px solid var(--line);width:fit-content"><span class="typing"><span></span><span></span><span></span></span></div>`:"");
+  c.scrollTop=c.scrollHeight;
+}
+
+async function coachSend(text){
+  const inp=document.getElementById("cin");
+  const q=(text!==undefined?text:(inp?inp.value:"")).trim();
+  if(!q||coachBusy)return; if(inp)inp.value="";
+  const qd=document.getElementById("quick"); if(qd)qd.innerHTML="";
+  coachMsgs.push({role:"user",text:q}); coachBusy=true; paintChat(true);
+  if(!cfgReady){
+    coachMsgs.push({role:"assistant",text:"(아직 코치 서버가 연결 안 됐어 — 선생님이 곧 켜줄 거야!) 그동안 '이번 주' 탭에서 오늘 할 것 하나만 체크해 보자 💪"});
+    coachBusy=false; paintChat();
+    /* #11: 대화 저장 */
+    S.coachHistory=coachMsgs.slice(-30); syncUp();
+    return;
+  }
+  const sys=`너는 포항 '어텐션 학원'의 따뜻하고 에너지 넘치는 학습 코치다. 상대는 시험을 준비하는 중·고등학생.
+핵심 원칙: 절대 완성된 계획을 통째로 주지 말 것. 소크라테스식 질문으로 학생이 스스로 답을 찾게 도와라.
+- 한 번에 질문은 1개만, 짧고 구체적으로. 답을 끌어낸 뒤 작고 현실적인 '오늘 할 일' 하나로 좁혀준다.
+- 반말로 친근하게, 2~4문장 이내로 간결하게.`;
+  const history=coachMsgs.slice(-8).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text}));
+  try{
+    const res=await fetch(CONFIG.FUNCTION_URL,{method:"POST",headers:{"Content-Type":"application/json","apikey":CONFIG.SUPABASE_KEY,"Authorization":"Bearer "+CONFIG.SUPABASE_KEY},body:JSON.stringify({system:sys,messages:history})});
+    const d=await res.json(); coachMsgs.push({role:"assistant",text:(d.text&&d.text.trim())?d.text.trim():"음, 다시 한 번 말해줄래?"});
+  }catch(e){ coachMsgs.push({role:"assistant",text:"코치 연결이 잠깐 안 되네 😅 '이번 주' 탭에서 오늘 1개만 먼저 체크해 보자."}); }
+  finally{
+    coachBusy=false; paintChat();
+    /* #11: 대화 저장 (최근 30개 유지) */
+    S.coachHistory=coachMsgs.slice(-30); syncUp();
+  }
+}
+
+/* ---------- boot ---------- */
+document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{S.tab=b.dataset.tab;if(b.dataset.tab==="setup")settingsWeek="cur";render();}));
+(async()=>{
+  await syncDown();
+  /* syncDown 후 서버 데이터의 coachHistory 반영 */
+  if(S.coachHistory&&S.coachHistory.length) coachMsgs=S.coachHistory;
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Supabase API 키 파일 (절대 커밋하지 마세요)
+files/Supabase api key.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 에디터
+.vscode/
+*.swp

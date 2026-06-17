@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>어텐션 · 원장님 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;500;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ink:#0d1015;--ink2:#141923;--card:#1a212e;--card2:#222b3a;--line:#2c3647;
+  --txt:#e9eef6;--sub:#94a3b8;--muted:#64748b;--amber:#ffc23d;--mint:#3ee0a3;--coral:#ff6b6b;--yellow:#ffd34d;--violet:#8b9dff;
+  --fd:'Black Han Sans',sans-serif;--fb:'Gothic A1',sans-serif;--fm:'Space Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:var(--fb);color:var(--txt);background:
+  radial-gradient(1000px 500px at 90% -10%,rgba(62,224,163,.10),transparent 60%),var(--ink);min-height:100vh;}
+.wrap{max-width:900px;margin:0 auto;padding:24px 18px 60px;}
+.disp{font-family:var(--fd);}.mono{font-family:var(--fm);}
+button{cursor:pointer;border:none;font-family:var(--fb);font-weight:800;transition:transform .12s;}
+button:active{transform:scale(.97);}
+.inp{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--txt);font-size:15px;outline:none;font-family:var(--fb);}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;}
+.bar{height:8px;background:var(--ink2);border-radius:99px;overflow:hidden;}
+.barfill{height:100%;border-radius:99px;transition:width .4s;}
+.stat{flex:1;text-align:center;padding:14px;}
+.row{border-top:1px solid var(--line);padding:14px 16px;cursor:pointer;}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.seg{background:var(--card2);border:1px solid var(--line);color:var(--sub);border-radius:99px;padding:7px 13px;font-size:13px;font-weight:700;}
+.seg.on{background:var(--amber);color:#1a1206;border-color:var(--amber);}
+.chip{font-family:var(--fm);font-weight:700;}
+.fade{animation:f .4s ease both;}@keyframes f{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<script>
+"use strict";
+/* ============================================================
+   ▼▼▼ CONFIG — 학생용과 같은 키 + 비밀번호 ▼▼▼
+   ============================================================ */
+const CONFIG = {
+  SUPABASE_URL    : "https://dukfcfjlmhfkrihfitbi.supabase.co",
+  SUPABASE_KEY    : "sb_publishable_twHlTdXtEmF3HOwM0h8ydA_zrMcqDJu",
+  // ⚠️ 배포 전 반드시 변경하세요 — GitHub 공개 저장소에 올리기 전에 새 비밀번호로 교체!
+  TEACHER_PASSCODE: "dlxodyd614614!",
+};
+/* ============================================================ */
+
+const WEEKDAYS=["일","월","화","수","목","금","토"];
+const WLABEL={1:"적게",2:"보통",3:"많이"};
+const REF_EMO=["","😣","😕","😐","🙂","😄"];
+let db=null;
+try{ db=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_KEY); }catch(e){}
+let sortBy="behind", cache=[], openId=null;
+
+/* utils */
+function todayMid(){const d=new Date();d.setHours(0,0,0,0);return d;}
+function parseDate(s){if(!s)return null;const d=new Date(s+"T00:00:00");return isNaN(d)?null:d;}
+function dayDiff(a,b){return Math.round((b-a)/86400000);}
+function iso(d){return d.toISOString().slice(0,10);}
+function fmtMD(d){return (d.getMonth()+1)+"."+d.getDate();}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const wd=x.getDay();x.setDate(x.getDate()+(wd===0?-6:1-wd));return x;}
+function curKey(){return iso(mondayOf(todayMid()));}
+function nextKey(){const m=mondayOf(todayMid());m.setDate(m.getDate()+7);return iso(m);}
+function weekRange(key){const m=new Date(key+"T00:00:00");const e=new Date(m);e.setDate(m.getDate()+6);return fmtMD(m)+" ~ "+fmtMD(e);}
+function ago(isoT){const t=new Date(isoT);const m=Math.floor((Date.now()-t)/60000);if(m<1)return "방금";if(m<60)return m+"분 전";const h=Math.floor(m/60);if(h<24)return h+"시간 전";return Math.floor(h/24)+"일 전";}
+
+/* per-student helpers (new weekly model) */
+function dDay(data){if(!data)return null;const d=parseDate(data.examDate);if(!d)return null;const dd=dayDiff(todayMid(),d);return dd>=0?dd:null;}
+function latestReflection(data){if(!data||!data.weeks)return null;const ks=Object.keys(data.weeks).filter(k=>data.weeks[k]&&data.weeks[k].reflection).sort();return ks.length?data.weeks[ks[ks.length-1]].reflection:null;}
+function plannedNext(data){if(!data||!data.weeks)return false;const w=data.weeks[nextKey()];if(!w)return false;
+  if(w.aiWeek&&w.aiWeek.days&&w.aiWeek.days.some(d=>d.tasks&&d.tasks.length))return true;
+  return (w.subjects||[]).some(s=>s.content&&s.content.trim());}
+function status(st){
+  if(!st.total)return {key:"none",label:"미시작",color:"var(--muted)"};
+  const pct=Math.round(st.progress/st.total*100);
+  const inactive=Math.floor((Date.now()-new Date(st.updated_at))/86400000);
+  if(pct<30||inactive>=3)return {key:"risk",label:"위험",color:"var(--coral)"};
+  if(pct<60)return {key:"warn",label:"주의",color:"var(--yellow)"};
+  return {key:"ok",label:"양호",color:"var(--mint)"};
+}
+
+/* ---- gate ---- */
+function renderGate(msg){
+  document.getElementById("root").innerHTML=`
+   <div class="fade" style="max-width:360px;margin:80px auto 0;text-align:center">
+     <div class="mono" style="color:var(--amber);font-size:12px;letter-spacing:2px;margin-bottom:12px">ATTENTION · TEACHER</div>
+     <h1 class="disp" style="font-size:30px;margin-bottom:8px">원장님 대시보드</h1>
+     <p style="color:var(--sub);font-size:13px;margin-bottom:24px">${msg||"비밀번호를 입력하세요"}</p>
+     <input id="pw" class="inp" type="password" placeholder="비밀번호" style="width:100%;text-align:center">
+     <button id="enter" style="width:100%;margin-top:14px;background:var(--amber);color:#1a1206;border-radius:14px;padding:14px;font-size:15px">입장</button>
+   </div>`;
+  const pw=document.getElementById("pw");
+  function go(){ if(pw.value===CONFIG.TEACHER_PASSCODE){sessionStorage.setItem("att_t","1");loadAndRender();} else renderGate("비밀번호가 틀렸어요."); }
+  document.getElementById("enter").addEventListener("click",go);
+  pw.addEventListener("keydown",e=>{if(e.key==="Enter")go();}); pw.focus();
+}
+
+/* ---- load ---- */
+async function loadAndRender(){
+  document.getElementById("root").innerHTML=`<div style="text-align:center;color:var(--sub);padding:80px 0">불러오는 중…</div>`;
+  try{ const {data,error}=await db.from("students").select("*").order("updated_at",{ascending:false}); if(error)throw error; cache=data||[]; }
+  catch(e){ document.getElementById("root").innerHTML=`<div style="text-align:center;color:var(--coral);padding:80px 20px">데이터를 불러오지 못했어요.<br><span style="color:var(--sub);font-size:13px">CONFIG의 주소·키를 확인하거나, 학생이 아직 없을 수 있어요.</span></div>`; return; }
+  renderDash();
+}
+
+/* ---- detail (펼침) ---- */
+function buildDetail(data){
+  const ck=curKey(); const w=(data&&data.weeks&&data.weeks[ck])||null;
+  const hasPlan=w&&w.subjects&&w.subjects.some(s=>s.content&&s.content.trim());
+  if(!hasPlan)return `<div style="margin-top:10px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px">이번 주 계획을 아직 세우지 않았어요.</div>`;
+  const subs=(w.subjects||[]).filter(s=>s.name&&s.content&&s.content.trim()).map(s=>`<div style="font-size:12.5px;margin-bottom:4px"><span style="color:var(--txt);font-weight:700">${esc(s.name)}</span> <span class="chip" style="color:var(--amber);font-size:10px">${WLABEL[s.weight||2]}</span> <span style="color:var(--sub)">· ${esc(s.content)}</span></div>`).join("");
+  const todayIso=iso(todayMid());
+  const days=((w.aiWeek&&w.aiWeek.days)||[]).filter(d=>d.tasks&&d.tasks.length).map(d=>{
+    const rows=d.tasks.map((t,i)=>{const done=!!(w.done&&w.done[d.date+"|"+t.subject+"|"+i]);
+      return `<div style="display:flex;gap:7px;align-items:flex-start;font-size:12px;margin-bottom:3px;opacity:${done?0.5:1}">
+        <span style="color:${done?'var(--mint)':'var(--muted)'};flex:0 0 auto">${done?'✓':'○'}</span>
+        <span style="color:var(--txt);font-weight:700;flex:0 0 auto">${esc(t.subject)}</span>
+        <span style="color:var(--sub)">${esc(t.task||"")}</span></div>`;}).join("");
+    return `<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:800;color:${d.date===todayIso?'var(--amber)':'var(--sub)'};margin-bottom:3px">${esc(d.md)}${d.date===todayIso?' · 오늘':''}</div>${rows}</div>`;
+  }).join("");
+  const r=latestReflection(data);
+  const refl=r?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+     <div style="font-size:11px;color:var(--muted);margin-bottom:4px">최근 회고 ${REF_EMO[r.rating]||''}</div>
+     ${r.good?`<div style="font-size:12px;margin-bottom:2px"><span style="color:var(--mint)">잘된 점</span> ${esc(r.good)}</div>`:""}
+     ${r.hard?`<div style="font-size:12px;margin-bottom:2px"><span style="color:var(--coral)">아쉬움</span> ${esc(r.hard)}</div>`:""}
+     ${r.change?`<div style="font-size:12px;margin-bottom:2px"><span style="color:var(--amber)">다음주</span> ${esc(r.change)}</div>`:""}
+     ${r.coach?`<div style="font-size:12px;color:var(--violet);margin-top:4px">💬 ${esc(r.coach)}</div>`:""}
+   </div>`:"";
+  return `<div class="fade" style="margin-top:10px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:6px">📚 이번 주 분량 (${weekRange(ck)})</div>${subs}
+    <div style="font-size:11px;color:var(--muted);font-weight:700;margin:12px 0 6px">🗓️ 요일별 계획</div>${days||'<div style="color:var(--muted);font-size:12px">아직 분배 전</div>'}
+    ${refl}</div>`;
+}
+
+/* ---- dashboard ---- */
+function renderDash(){
+  const showNext=[5,6,0].includes(todayMid().getDay());
+  const list=cache.map(st=>{const s=status(st);const pct=st.total?Math.round(st.progress/st.total*100):0;
+    return {...st,_s:s,_pct:pct,_dday:dDay(st.data),_refl:latestReflection(st.data),_next:plannedNext(st.data)};});
+  if(sortBy==="behind") list.sort((a,b)=>(a._pct-b._pct)||(new Date(a.updated_at)-new Date(b.updated_at)));
+  else if(sortBy==="recent") list.sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+  else list.sort((a,b)=>(a.nickname||"").localeCompare(b.nickname||""));
+
+  const n=list.length;
+  const avg=n?Math.round(list.reduce((a,b)=>a+b._pct,0)/n):0;
+  const risk=list.filter(x=>x._s.key==="risk").length;
+  const noNext=list.filter(x=>!x._next).length;
+
+  const rows=n?list.map(st=>`
+    <div class="row" data-id="${esc(st.id)}">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="dot" style="background:${st._s.color}"></span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-weight:800;font-size:15px">${esc(st.nickname)}</span>
+            <span style="font-size:11px;color:${st._s.color};font-weight:700">${st._s.label}</span>
+            ${st._dday!==null?`<span class="mono" style="font-size:11px;color:${st._dday<=3?'var(--coral)':'var(--sub)'}">D-${st._dday===0?"DAY":st._dday}</span>`:""}
+            ${showNext&&!st._next?`<span style="font-size:10px;color:var(--coral);border:1px solid var(--coral);border-radius:5px;padding:1px 5px;font-weight:700">다음주 미계획</span>`:""}
+            <span style="margin-left:auto;color:var(--muted);font-size:12px">${ago(st.updated_at)} ${openId===st.id?'▴':'▾'}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:7px">
+            <div class="bar" style="flex:1"><div class="barfill" style="width:${st._pct}%;background:${st._s.color}"></div></div>
+            <span class="mono" style="font-size:13px;color:var(--txt);font-weight:700;width:42px;text-align:right">${st._pct}%</span>
+          </div>
+          ${(openId!==st.id&&st._refl)?`<div style="margin-top:8px;font-size:12px;color:var(--sub)"><span style="font-size:13px">${REF_EMO[st._refl.rating]||"🙂"}</span>${st._refl.hard?` <span style="color:var(--coral)">아쉬움</span> ${esc(st._refl.hard)}`:""}${st._refl.change?` · <span style="color:var(--amber)">다음주</span> ${esc(st._refl.change)}`:""}</div>`:""}
+          ${openId===st.id?buildDetail(st.data):""}
+        </div>
+      </div>
+    </div>`).join("")
+    : `<div style="text-align:center;color:var(--sub);padding:50px 20px">아직 시작한 학생이 없어요.<br><span style="font-size:13px">학생들에게 링크를 보내면 여기에 실시간으로 나타납니다.</span></div>`;
+
+  document.getElementById("root").innerHTML=`
+   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px">
+     <div>
+       <div class="mono" style="color:var(--amber);font-size:12px;letter-spacing:2px">ATTENTION · TEACHER</div>
+       <h1 class="disp" style="font-size:28px">학생 현황 대시보드</h1>
+     </div>
+     <button id="refresh" style="background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px">↻ 새로고침</button>
+   </div>
+   <div class="card" style="display:flex;margin-bottom:18px">
+     <div class="stat" style="border-right:1px solid var(--line)"><div class="disp" style="font-size:26px">${n}</div><div style="color:var(--sub);font-size:12px">전체 학생</div></div>
+     <div class="stat" style="border-right:1px solid var(--line)"><div class="disp" style="font-size:26px;color:var(--mint)">${avg}%</div><div style="color:var(--sub);font-size:12px">평균 진행률</div></div>
+     <div class="stat"${showNext?` style="border-right:1px solid var(--line)"`:""}><div class="disp" style="font-size:26px;color:var(--coral)">${risk}</div><div style="color:var(--sub);font-size:12px">위험 학생</div></div>
+     ${showNext?`<div class="stat"><div class="disp" style="font-size:26px;color:var(--yellow)">${noNext}</div><div style="color:var(--sub);font-size:12px">다음주 미계획</div></div>`:""}
+   </div>
+   <div style="display:flex;gap:8px;margin-bottom:6px">
+     <button class="seg ${sortBy==="behind"?"on":""}" data-sort="behind">뒤처진 순</button>
+     <button class="seg ${sortBy==="recent"?"on":""}" data-sort="recent">최근 활동순</button>
+     <button class="seg ${sortBy==="name"?"on":""}" data-sort="name">이름순</button>
+   </div>
+   <div class="card" style="overflow:hidden">${rows}</div>
+   <div style="text-align:center;color:var(--muted);font-size:11px;margin-top:14px">학생 카드를 누르면 그 주의 계획·진행·회고가 펼쳐집니다 · 🔴위험 30%↓/3일+ 미활동 · 🟡주의 60%↓ · 🟢양호</div>`;
+
+  document.getElementById("refresh").addEventListener("click",loadAndRender);
+  document.querySelectorAll(".seg").forEach(b=>b.addEventListener("click",()=>{sortBy=b.dataset.sort;renderDash();}));
+  document.querySelectorAll(".row[data-id]").forEach(r=>r.addEventListener("click",()=>{const id=r.dataset.id;openId=(openId===id)?null:id;renderDash();}));
+}
+
+if(sessionStorage.getItem("att_t")==="1")loadAndRender(); else renderGate();
+</script>
+</body>
+</html>
