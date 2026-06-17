@@ -111,6 +111,29 @@ const CONFIG = {
 const WEEKDAYS=["일","월","화","수","목","금","토"];
 const WLABEL={1:"적게",2:"보통",3:"많이"};
 const KEY="attention-planner-v4";
+const THEMES={
+  amber: {main:"#ffc23d",dark:"#f2a900",label:"🌕 앰버"},
+  mint:  {main:"#3ee0a3",dark:"#2bc88c",label:"🌿 민트"},
+  violet:{main:"#8b9dff",dark:"#6b7fff",label:"💜 바이올렛"},
+  coral: {main:"#ff6b6b",dark:"#e85555",label:"🌸 코랄"},
+  sky:   {main:"#38bdf8",dark:"#0ea5e9",label:"🩵 스카이"},
+};
+const BG_STYLES={
+  dark:  {ink:"#0d1015",ink2:"#141923",card:"#1a212e",card2:"#222b3a",line:"#2c3647",label:"🌑 다크"},
+  navy:  {ink:"#080e1c",ink2:"#0f1829",card:"#162032",card2:"#1d2d47",line:"#243550",label:"🌊 네이비"},
+  purple:{ink:"#0e0c1a",ink2:"#150f28",card:"#1d1835",card2:"#261f44",line:"#342a56",label:"🔮 퍼플"},
+};
+function applyTheme(){
+  const a=THEMES[S.theme&&S.theme.accent]||THEMES.amber;
+  const b=BG_STYLES[S.theme&&S.theme.bg]||BG_STYLES.dark;
+  const r=document.documentElement.style;
+  r.setProperty("--amber",a.main); r.setProperty("--amber-d",a.dark);
+  r.setProperty("--ink",b.ink); r.setProperty("--ink2",b.ink2);
+  r.setProperty("--card",b.card); r.setProperty("--card2",b.card2);
+  r.setProperty("--line",b.line);
+  document.body.style.background=`radial-gradient(1200px 600px at 80% -10%,${hexAlpha(a.main,.10)},transparent 60%),radial-gradient(900px 500px at -10% 110%,${hexAlpha(a.main,.06)},transparent 55%),${b.ink}`;
+}
+function hexAlpha(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),bl=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${bl},${a})`;}
 const cfgReady = CONFIG.SUPABASE_KEY.indexOf("여기에")<0;
 let db=null;
 try{ if(cfgReady && window.supabase) db=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_KEY); }catch(e){}
@@ -128,8 +151,17 @@ function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">"
 /* ---------- 주(週) 헬퍼 ---------- */
 function iso(d){return d.toISOString().slice(0,10);}
 function mondayOf(d){const x=new Date(d);x.setHours(0,0,0,0);const wd=x.getDay();x.setDate(x.getDate()+(wd===0?-6:1-wd));return x;}
-function curKey(){return iso(mondayOf(todayMid()));}
-function nextKey(){const m=mondayOf(todayMid());m.setDate(m.getDate()+7);return iso(m);}
+function planStartBase(){
+  if(S.planStartDate){const d=parseDate(S.planStartDate);if(d)return d;}
+  return mondayOf(todayMid());
+}
+function curKey(){
+  const start=planStartBase(); const today=todayMid();
+  const diff=Math.floor((today-start)/86400000);
+  const offset=diff<0?0:Math.floor(diff/7);
+  const d=new Date(start); d.setDate(d.getDate()+offset*7); return iso(d);
+}
+function nextKey(){const d=new Date(curKey()+"T00:00:00");d.setDate(d.getDate()+7);return iso(d);}
 function weekDates(key){const m=new Date(key+"T00:00:00");const a=[];for(let i=0;i<7;i++){const d=new Date(m);d.setDate(m.getDate()+i);a.push({i,iso:iso(d),wd:d.getDay(),md:fmtMD(d)+"("+WEEKDAYS[d.getDay()]+")"});}return a;}
 function weekRange(key){const a=weekDates(key);return fmtMD(new Date(a[0].iso+"T00:00:00"))+" ~ "+fmtMD(new Date(a[6].iso+"T00:00:00"));}
 function weekHash(w){return JSON.stringify((w.subjects||[]).map(x=>({n:x.name,c:x.content,w:x.weight})));}
@@ -153,10 +185,12 @@ function editKey(){return settingsWeek==="next"?nextKey():curKey();}
 function editWeek(){return ensureWeek(editKey());}
 
 /* ---------- state ---------- */
-let S=load()||{ id:newId(), nickname:"", examDate:"", weeks:{}, generated:false, tab:"setup", coachHistory:[] };
+let S=load()||{ id:newId(), nickname:"", examDate:"", planStartDate:"", weeks:{}, generated:false, tab:"setup", coachHistory:[], theme:{accent:"amber",bg:"dark"} };
 if(!S.id)S.id=newId();
 if(S.examDate===undefined)S.examDate="";
+if(S.planStartDate===undefined)S.planStartDate="";
 if(!S.coachHistory)S.coachHistory=[];
+if(!S.theme)S.theme={accent:"amber",bg:"dark"};
 if(!S.weeks){
   S.weeks={};
   if(Array.isArray(S.subjects)&&S.subjects.length){
@@ -349,11 +383,34 @@ function renderSetup(){
   v.innerHTML=`
   <div style="padding:4px 16px 8px">
 
-    <!-- #4: 시험일을 주차 토글과 분리 — 전역 설정 카드 -->
+    <!-- 전역 설정 카드 -->
     <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
-      ${secHead("📌","시험일",'<span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:4px">· 전체 공통 설정</span>')}
-      <input id="exam-date" class="inp" type="date" value="${esc(S.examDate||"")}" style="color-scheme:dark">
-      <div style="color:var(--sub);font-size:13px;margin-top:6px">한 번만 설정하면 D-day를 항상 카운트다운해줘요.</div>
+      ${secHead("📌","기본 설정",'<span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:4px">· 전체 공통</span>')}
+      <div style="display:grid;gap:10px">
+        <div>
+          <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:5px">시험일</div>
+          <input id="exam-date" class="inp" type="date" value="${esc(S.examDate||"")}" style="color-scheme:dark">
+        </div>
+        <div>
+          <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:5px">📅 플랜 시작일 <span style="font-weight:400;color:var(--muted)">(오늘부터 시작하려면 오늘 날짜 선택)</span></div>
+          <input id="plan-start" class="inp" type="date" value="${esc(S.planStartDate||"")}" style="color-scheme:dark">
+          <div style="color:var(--sub);font-size:12px;margin-top:5px;line-height:1.5">선택한 날짜부터 7일씩 한 주로 계산해요. 비워두면 이번 주 월요일 기준.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 테마 설정 카드 -->
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px">
+      ${secHead("🎨","테마 꾸미기")}
+      <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:8px">포인트 색상</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${Object.entries(THEMES).map(([k,t])=>`<button class="theme-accent" data-k="${k}" style="flex:1;min-width:80px;background:${(S.theme&&S.theme.accent===k)?`linear-gradient(90deg,${t.main},${t.dark})`:'var(--card2)'};color:${(S.theme&&S.theme.accent===k)?'#1a1206':'var(--sub)'};border:1px solid ${(S.theme&&S.theme.accent===k)?t.main:'var(--line)'};border-radius:10px;padding:9px 6px;font-size:12px;font-weight:700">${t.label}</button>`).join("")}
+      </div>
+      <div style="color:var(--sub);font-size:12px;font-weight:700;margin-bottom:8px">배경 스타일</div>
+      <div style="display:flex;gap:6px">
+        ${Object.entries(BG_STYLES).map(([k,b])=>`<button class="theme-bg" data-k="${k}" style="flex:1;background:${(S.theme&&S.theme.bg===k)?'var(--card2)':'transparent'};color:${(S.theme&&S.theme.bg===k)?'var(--txt)':'var(--sub)'};border:1px solid ${(S.theme&&S.theme.bg===k)?'var(--amber)':'var(--line)'};border-radius:10px;padding:9px 0;font-size:12px;font-weight:700">${b.label}</button>`).join("")}
+      </div>
+      <div style="color:var(--sub);font-size:12px;margin-top:10px;line-height:1.5">💡 과목명에 이모티콘을 넣으면 더 예뻐요! (예: 📐 수학, 📖 국어, 🔬 과학)</div>
     </div>
 
     <!-- #2: 복구 코드 + 닉네임 변경 -->
@@ -388,6 +445,18 @@ function renderSetup(){
   renderSubs();
   v.querySelectorAll(".sw").forEach(b=>b.addEventListener("click",()=>{settingsWeek=b.dataset.w;renderSetup();}));
   document.getElementById("exam-date").addEventListener("change",e=>{S.examDate=e.target.value;syncUp();renderHeader();});
+  document.getElementById("plan-start").addEventListener("change",e=>{
+    S.planStartDate=e.target.value; syncUp();
+    renderHeader();
+    const hint=e.target.closest("div").querySelector("div:last-child");
+    if(hint&&e.target.value){const d=parseDate(e.target.value);if(d)hint.textContent=`✓ ${fmtMD(d)}(${WEEKDAYS[d.getDay()]})부터 7일씩 계산합니다.`;}
+  });
+  v.querySelectorAll(".theme-accent").forEach(b=>b.addEventListener("click",()=>{
+    if(!S.theme)S.theme={};S.theme.accent=b.dataset.k;applyTheme();syncUp();renderSetup();
+  }));
+  v.querySelectorAll(".theme-bg").forEach(b=>b.addEventListener("click",()=>{
+    if(!S.theme)S.theme={};S.theme.bg=b.dataset.k;applyTheme();syncUp();renderSetup();
+  }));
 
   /* 닉네임 변경 */
   document.getElementById("nick-save").addEventListener("click",()=>{
@@ -749,8 +818,9 @@ async function coachSend(text){
 document.querySelectorAll(".tabbtn").forEach(b=>b.addEventListener("click",()=>{S.tab=b.dataset.tab;if(b.dataset.tab==="setup")settingsWeek="cur";render();}));
 (async()=>{
   await syncDown();
-  /* syncDown 후 서버 데이터의 coachHistory 반영 */
   if(S.coachHistory&&S.coachHistory.length) coachMsgs=S.coachHistory;
+  if(!S.theme)S.theme={accent:"amber",bg:"dark"};
+  applyTheme();
   render();
 })();
 </script>
